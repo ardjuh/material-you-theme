@@ -107,7 +107,7 @@ function apply_theme(base_presets, color_mappings, notify=false) {
     const show_notifications = settings.get_boolean("show-notifications");
     const height = settings.get_int("resize-height");
     const width = settings.get_int("resize-width");
-    let size = {height: height, width: width};
+    let size = {height, width};
     let color_mappings_sel = color_mappings[color_scheme.toLowerCase()];
 
     // Checking dark theme preference
@@ -145,7 +145,6 @@ function apply_theme(base_presets, color_mappings, notify=false) {
 
 
     // Overwriting keys in base_preset with material colors
-
     base_preset = map_colors(color_mapping, base_preset, scheme);
 
     // Generating gtk css from preset
@@ -177,8 +176,8 @@ function apply_theme(base_presets, color_mappings, notify=false) {
                 theme.schemes.dark.props
             ).variables
         );
-        create_dir_sync(GLib.get_home_dir() + "/.local/share/themes/MaterialYou");
-        create_dir_sync(GLib.get_home_dir() + "/.local/share/themes/MaterialYou/gnome-shell");
+        create_dir(GLib.get_home_dir() + "/.local/share/themes/MaterialYou");
+        create_dir(GLib.get_home_dir() + "/.local/share/themes/MaterialYou/gnome-shell");
         compile_sass(
             EXTENSIONDIR + "/shell/" + version + "/gnome-shell.scss",
             GLib.get_home_dir() + "/.local/share/themes/MaterialYou/gnome-shell/gnome-shell.css",
@@ -202,14 +201,6 @@ function remove_theme() {
     // Undoing changes to theme when disabling extension
     delete_file(GLib.get_home_dir() + "/.config/gtk-4.0/gtk.css");
     delete_file(GLib.get_home_dir() + "/.config/gtk-3.0/gtk.css");
-
-    // Get prefs
-    // const settings = ExtensionUtils.getSettings(PREFS_SCHEMA);
-    // const show_notifications = settings.get_boolean("show-notifications");
-
-    // Notifying user on theme removal
-    // Main.notify("Removed Material You Theme",
-    // "Some apps may require re-logging in to update");
 }
 
 async function create_dir(path) {
@@ -229,16 +220,6 @@ async function create_dir(path) {
             );
         });
     } catch (e) {
-        log(e);
-    }
-}
-
-function create_dir_sync(path) {
-    const file = Gio.File.new_for_path(path);
-    // Synchronous, blocking method
-    try {
-        file.make_directory(null);
-    } catch(e) {
         log(e);
     }
 }
@@ -288,12 +269,6 @@ async function write_str(str, path) {
     }
 }
 
-function write_str_sync(str, path) {
-    const file = Gio.File.new_for_path(path);
-    const [, etag] = file.replace_contents(str, null, false,
-    Gio.FileCreateFlags.REPLACE_DESTINATION, null);
-}
-
 function read_file(path) {
     const file = Gio.File.new_for_path(path);
     const [, contents, etag] = file.load_contents(null);
@@ -303,16 +278,15 @@ function read_file(path) {
     return contentsString;
 }
 
-function modify_colors(scss_path, output_path, vars) {
+async function modify_colors(scss_path, output_path, vars) {
     let colors_template = read_file(scss_path);
     for (const key in vars) {
         colors_template = colors_template.replace("{{" + key + "}}", vars[key]);
     }
-    write_str_sync(colors_template, output_path);
+    write_str(colors_template, output_path);
 }
 
 function compile_sass(scss_path, output_path, shell_settings) {
-
     try {
         let proc = Gio.Subprocess.new(
             [EXTENSIONDIR + '/node_modules/sass/sass.js', scss_path, output_path],
@@ -321,7 +295,7 @@ function compile_sass(scss_path, output_path, shell_settings) {
 
         // NOTE: triggering the cancellable passed to these functions will only
         //       cancel the function NOT the process.
-        let cancellable = new Gio.Cancellable();
+        const cancellable = new Gio.Cancellable();
 
         proc.wait_async(cancellable, (proc, result) => {
             try {
@@ -331,18 +305,11 @@ function compile_sass(scss_path, output_path, shell_settings) {
 
                 // The process has completed and you can check the exit status or
                 // ignore it if you just need notification the process completed.
-                if (proc.get_successful()) {
-                    // log('the process succeeded');
-                    if (shell_settings != null) {
-                        shell_settings.set_string("name", "reset");
-                    }
-                } else {
-                    // log('the process failed');
+                if (proc.get_successful() && shell_settings != null) {
+                    shell_settings.set_string("name", "reset");
                 }
             } catch (e) {
                 logError(e);
-            } finally {
-                loop.quit();
             }
         });
     } catch (e) {
@@ -363,21 +330,19 @@ function map_colors(color_mapping, base_preset, scheme) {
                 rgba_str = "rgba(" + r + ", " + g + ", " + b + ", " + color_mapping[key].opacity + ")"
                 base_preset.variables[key] = rgba_str;
             }
-        } else {
-            if (color_mapping[key].length > 0) {
-                total_color = scheme[color_mapping[key][0].color]; // Setting base color
-                // Mixing in added colors
-                for (let i = 1; i < color_mapping[key].length; i++) {
-                    let argb = scheme[color_mapping[key][i].color];
-                    let r = color_utils.redFromArgb(argb);
-                    let g = color_utils.greenFromArgb(argb);
-                    let b = color_utils.blueFromArgb(argb);
-                    let a = color_mapping[key][i].opacity;
-                    let added_color = color_utils.argbFromRgba(r, g, b, a);
-                    total_color = color_utils.blendArgb(total_color, added_color);
-                }
-                base_preset.variables[key] = string_utils.hexFromArgb(total_color);
+        } else if (color_mapping[key].length > 0) {
+            total_color = scheme[color_mapping[key][0].color]; // Setting base color
+            // Mixing in added colors
+            for (let i = 1; i < color_mapping[key].length; i++) {
+                let argb = scheme[color_mapping[key][i].color];
+                let r = color_utils.redFromArgb(argb);
+                let g = color_utils.greenFromArgb(argb);
+                let b = color_utils.blueFromArgb(argb);
+                let a = color_mapping[key][i].opacity;
+                let added_color = color_utils.argbFromRgba(r, g, b, a);
+                total_color = color_utils.blendArgb(total_color, added_color);
             }
+            base_preset.variables[key] = string_utils.hexFromArgb(total_color);
         }
     }
     return base_preset;
