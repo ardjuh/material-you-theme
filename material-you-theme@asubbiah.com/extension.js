@@ -18,10 +18,10 @@
 
 /* exported init, PREFS_SCHEMA */
 
-const WALLPAPER_SCHEMA = 'org.gnome.desktop.background';
-const INTERFACE_SCHEMA = 'org.gnome.desktop.interface';
-const SHELL_SCHEMA = 'org.gnome.shell.extensions.user-theme';
-const PREFS_SCHEMA = 'org.gnome.shell.extensions.material-you-theme';
+const WALLPAPER_SCHEMA = "org.gnome.desktop.background";
+const INTERFACE_SCHEMA = "org.gnome.desktop.interface";
+const SHELL_SCHEMA = "org.gnome.shell.extensions.user-theme";
+const PREFS_SCHEMA = "org.gnome.shell.extensions.material-you-theme";
 
 const { Gio, GLib, Soup, GdkPixbuf, Gdk } = imports.gi;
 
@@ -53,20 +53,20 @@ class Extension {
 
     enable() {
         this._interfaceSettings = ExtensionUtils.getSettings(INTERFACE_SCHEMA);
-        this._interfaceSettings.connect('changed::color-scheme', () => {
+        this._interfaceSettings.connect("changed::color-scheme", () => {
             apply_theme(base_presets, color_mappings, true);
         });
         this._wallpaperSettings = ExtensionUtils.getSettings(WALLPAPER_SCHEMA);
-        this._wallpaperSettings.connect('changed::picture-uri', () => {
+        this._wallpaperSettings.connect("changed::picture-uri", () => {
             apply_theme(base_presets, color_mappings, true);
         });
         this._prefsSettings = ExtensionUtils.getSettings(PREFS_SCHEMA);
-        this._prefsSettings.connect('changed::scheme', () => {
+        this._prefsSettings.connect("changed::scheme", () => {
             apply_theme(base_presets, color_mappings, true);
         });
         try {
             this._shellSettings = ExtensionUtils.getSettings(SHELL_SCHEMA);
-            this._shellSettings.connect('changed::name', () => {
+            this._shellSettings.connect("changed::name", () => {
                 // log("shell settings theme changed");
                 // log(this._shellSettings.get_string("name"));
                 if (this._shellSettings.get_string("name") === "reset") {
@@ -92,14 +92,16 @@ function init(meta) {
     return new Extension(meta.uuid);
 }
 
-function apply_theme(base_presets, color_mappings, notify=false) {
+function apply_theme(base_presets, color_mappings, notify = false) {
     // Get prefs
     const settings = ExtensionUtils.getSettings(PREFS_SCHEMA);
+    if (!settings.get_boolean("auto-run")) return; // Move this code if you want to implement manual run
+
     let shell_settings = null;
     let warn_shell_theme = false;
     try {
         shell_settings = ExtensionUtils.getSettings(SHELL_SCHEMA);
-    } catch(e) {
+    } catch (e) {
         log(e);
         warn_shell_theme = true;
     }
@@ -107,13 +109,13 @@ function apply_theme(base_presets, color_mappings, notify=false) {
     const show_notifications = settings.get_boolean("show-notifications");
     const height = settings.get_int("resize-height");
     const width = settings.get_int("resize-width");
-    let size = {height: height, width: width};
+    let size = { height: height, width: width };
     let color_mappings_sel = color_mappings[color_scheme.toLowerCase()];
 
     // Checking dark theme preference
     let is_dark = false;
     let interface_settings = new Gio.Settings({ schema: INTERFACE_SCHEMA });
-    let dark_pref = interface_settings.get_string('color-scheme');
+    let dark_pref = interface_settings.get_string("color-scheme");
     if (dark_pref === "prefer-dark") {
         is_dark = true;
     }
@@ -124,11 +126,15 @@ function apply_theme(base_presets, color_mappings, notify=false) {
     if (is_dark) {
         wall_uri_type = "-dark";
     }
-    let wall_path = desktop_settings.get_string('picture-uri' + wall_uri_type);
+    let wall_path = desktop_settings.get_string("picture-uri" + wall_uri_type);
     if (wall_path.includes("file://")) {
         wall_path = Gio.File.new_for_uri(wall_path).get_path();
     }
-    let pix_buf = GdkPixbuf.Pixbuf.new_from_file_at_size(wall_path, size.width, size.height);
+    let pix_buf = GdkPixbuf.Pixbuf.new_from_file_at_size(
+        wall_path,
+        size.width,
+        size.height
+    );
     let theme = theme_utils.themeFromImage(pix_buf);
 
     // Configuring for light or dark theme
@@ -143,7 +149,6 @@ function apply_theme(base_presets, color_mappings, notify=false) {
         theme_str = _("Dark");
     }
 
-
     // Overwriting keys in base_preset with material colors
 
     base_preset = map_colors(color_mapping, base_preset, scheme);
@@ -151,11 +156,18 @@ function apply_theme(base_presets, color_mappings, notify=false) {
     // Generating gtk css from preset
     let css = "";
     for (const key in base_preset.variables) {
-        css += "@define-color " + key + " " + base_preset.variables[key] + ";\n"
+        css +=
+            "@define-color " + key + " " + base_preset.variables[key] + ";\n";
     }
     for (const prefix_key in base_preset.palette) {
         for (const key_2 in base_preset.palette[prefix_key]) {
-            css += "@define-color " + prefix_key + key_2 + " " + base_preset.palette[prefix_key][key_2] + ";\n"
+            css +=
+                "@define-color " +
+                prefix_key +
+                key_2 +
+                " " +
+                base_preset.palette[prefix_key][key_2] +
+                ";\n";
         }
     }
 
@@ -169,19 +181,30 @@ function apply_theme(base_presets, color_mappings, notify=false) {
         const version = Config.PACKAGE_VERSION.substring(0, 2);
 
         modify_colors(
-            EXTENSIONDIR + "/shell/" + version + "/gnome-shell-sass/_colors.txt",
-            EXTENSIONDIR + "/shell/" + version + "/gnome-shell-sass/_colors.scss",
+            EXTENSIONDIR +
+                "/shell/" +
+                version +
+                "/gnome-shell-sass/_colors.txt",
+            EXTENSIONDIR +
+                "/shell/" +
+                version +
+                "/gnome-shell-sass/_colors.scss",
             map_colors(
                 color_mappings_sel.dark,
                 base_presets.dark,
                 theme.schemes.dark.props
             ).variables
         );
-        create_dir_sync(GLib.get_home_dir() + "/.local/share/themes/MaterialYou");
-        create_dir_sync(GLib.get_home_dir() + "/.local/share/themes/MaterialYou/gnome-shell");
+        create_dir_sync(
+            GLib.get_home_dir() + "/.local/share/themes/MaterialYou"
+        );
+        create_dir_sync(
+            GLib.get_home_dir() + "/.local/share/themes/MaterialYou/gnome-shell"
+        );
         compile_sass(
             EXTENSIONDIR + "/shell/" + version + "/gnome-shell.scss",
-            GLib.get_home_dir() + "/.local/share/themes/MaterialYou/gnome-shell/gnome-shell.css",
+            GLib.get_home_dir() +
+                "/.local/share/themes/MaterialYou/gnome-shell/gnome-shell.css",
             shell_settings
         );
     }
@@ -189,11 +212,23 @@ function apply_theme(base_presets, color_mappings, notify=false) {
     // Notifying user on theme change
     if (notify && show_notifications) {
         if (warn_shell_theme) {
-            Main.notify("Applied Material You " + color_scheme + " " + theme_str + " Theme",
-                "WARNING! Shell theme could not be applied automatically, Some apps may require re-logging in to update");
+            Main.notify(
+                "Applied Material You " +
+                    color_scheme +
+                    " " +
+                    theme_str +
+                    " Theme",
+                "WARNING! Shell theme could not be applied automatically, Some apps may require re-logging in to update"
+            );
         } else {
-            Main.notify("Applied Material You " + color_scheme + " " + theme_str + " Theme",
-                "Some apps may require re-logging in to update");
+            Main.notify(
+                "Applied Material You " +
+                    color_scheme +
+                    " " +
+                    theme_str +
+                    " Theme",
+                "Some apps may require re-logging in to update"
+            );
         }
     }
 }
@@ -238,7 +273,7 @@ function create_dir_sync(path) {
     // Synchronous, blocking method
     try {
         file.make_directory(null);
-    } catch(e) {
+    } catch (e) {
         log(e);
     }
 }
@@ -247,17 +282,13 @@ async function delete_file(path) {
     const file = Gio.File.new_for_path(path);
     try {
         await new Promise((resolve, reject) => {
-            file.delete_async(
-                GLib.PRIORITY_DEFAULT,
-                null,
-                (file_, result) => {
-                    try {
-                        resolve(file.delete_finish(result));
-                    } catch (e) {
-                        reject(e);
-                    }
+            file.delete_async(GLib.PRIORITY_DEFAULT, null, (file_, result) => {
+                try {
+                    resolve(file.delete_finish(result));
+                } catch (e) {
+                    reject(e);
                 }
-            );
+            });
         });
     } catch (e) {
         log(e);
@@ -290,14 +321,19 @@ async function write_str(str, path) {
 
 function write_str_sync(str, path) {
     const file = Gio.File.new_for_path(path);
-    const [, etag] = file.replace_contents(str, null, false,
-    Gio.FileCreateFlags.REPLACE_DESTINATION, null);
+    const [, etag] = file.replace_contents(
+        str,
+        null,
+        false,
+        Gio.FileCreateFlags.REPLACE_DESTINATION,
+        null
+    );
 }
 
 function read_file(path) {
     const file = Gio.File.new_for_path(path);
     const [, contents, etag] = file.load_contents(null);
-    const decoder = new TextDecoder('utf-8');
+    const decoder = new TextDecoder("utf-8");
     const contentsString = decoder.decode(contents);
 
     return contentsString;
@@ -312,10 +348,13 @@ function modify_colors(scss_path, output_path, vars) {
 }
 
 function compile_sass(scss_path, output_path, shell_settings) {
-
     try {
         let proc = Gio.Subprocess.new(
-            [EXTENSIONDIR + '/node_modules/sass/sass.js', scss_path, output_path],
+            [
+                EXTENSIONDIR + "/node_modules/sass/sass.js",
+                scss_path,
+                output_path,
+            ],
             Gio.SubprocessFlags.NONE
         );
 

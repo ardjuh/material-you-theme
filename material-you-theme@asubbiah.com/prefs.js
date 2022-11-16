@@ -183,6 +183,7 @@ class MiscGroup extends Adw.PreferencesGroup {
         this.connect("destroy", () => this._settings.run_dispose());
 
         this._addToggle("show-notifications", this._settings, "Show Notifications");
+        this._addToggle("auto-run", this._settings, "Always Run on Changes");
         this._addSpinner("resize-width", this._settings, "Wallpaper Sampling Width",
                          "Width to resize sample to, higher values may cause slowdown", 8, 4096, 1);
         this._addSpinner("resize-height", this._settings, "Wallpaper Sampling Height",
